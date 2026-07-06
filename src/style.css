@@ -32,6 +32,11 @@ html {
   scroll-behavior: smooth;
 }
 
+html,
+body {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   background:
@@ -66,11 +71,11 @@ input::placeholder {
 }
 
 #app {
-  min-height: 100vh;
+  min-height: 100svh;
 }
 
 .app {
-  min-height: 100vh;
+  min-height: 100svh;
   padding: 14px 12px 22px;
   background:
     radial-gradient(circle at top, rgba(215, 177, 90, 0.055), transparent 28%),
@@ -348,13 +353,33 @@ input::placeholder {
 /* FILAS */
 
 .percent-row,
-.mode-row {
+.mode-row,
+.money-grid {
   display: flex;
   gap: 10px;
 }
 
 .percent-row {
   margin-bottom: 0;
+}
+
+.money-grid {
+  align-items: flex-start;
+}
+
+.money-grid .money-input {
+  min-height: 44px;
+  border-radius: var(--radius-input-sm);
+  padding: 0 10px;
+  margin-bottom: 8px;
+}
+
+.money-grid .money-input span {
+  font-size: 17px;
+}
+
+.money-grid .money-input input {
+  font-size: 17px;
 }
 
 /* BOTONES DE MODO */
@@ -370,7 +395,7 @@ input::placeholder {
   border: 1px solid rgba(220, 180, 90, 0.12);
   background: rgba(255, 255, 255, 0.02);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   text-align: center;
   padding: 9px 12px;
@@ -405,16 +430,158 @@ input::placeholder {
     0 6px 14px rgba(215, 177, 90, 0.05);
 }
 
-/* PASO 2 */
+/* DESCUENTOS */
 
-#realSection .field,
-#finalSection .field {
+.discounts-list {
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.discounts-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.discount-item {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(220, 180, 90, 0.1);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.014));
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.015);
+}
+
+.discount-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent);
+  pointer-events: none;
+}
+
+.discount-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.discount-header .group-title {
+  margin: 0;
+}
+
+.remove-discount-btn {
+  flex-shrink: 0;
+  border: 1px solid rgba(217, 138, 138, 0.16);
+  background: rgba(217, 138, 138, 0.055);
+  color: var(--danger);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.12s ease,
+    opacity 0.18s ease;
+}
+
+.remove-discount-btn:hover:not(:disabled) {
+  border-color: rgba(217, 138, 138, 0.28);
+  background: rgba(217, 138, 138, 0.09);
+  transform: translateY(-1px);
+}
+
+.remove-discount-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.type-row {
+  margin-bottom: 10px;
+}
+
+.type-row .mode-btn {
+  min-height: 38px;
+  padding: 8px 9px;
+  white-space: normal;
+  line-height: 1.12;
+}
+
+.discount-fields .money-grid {
+  margin-bottom: 2px;
+}
+
+.compact-input {
+  min-height: 44px;
+  border-radius: var(--radius-input-sm);
+  padding: 0 10px;
+  margin-bottom: 0;
+}
+
+.compact-input span {
+  font-size: 17px;
+}
+
+.compact-input input {
+  font-size: 17px;
+}
+
+.variable-rate {
   margin-top: 2px;
 }
 
-#realSection .percent-input,
-#finalSection .money-input {
+.add-discount-btn {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  border: 1px dashed rgba(220, 180, 90, 0.24);
+  border-radius: 999px;
+  background: rgba(215, 177, 90, 0.035);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 850;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.12s ease,
+    box-shadow 0.18s ease;
+}
+
+.add-discount-btn:hover {
+  border-color: rgba(215, 177, 90, 0.36);
+  background: rgba(215, 177, 90, 0.065);
+  box-shadow: 0 8px 18px rgba(215, 177, 90, 0.05);
+  transform: translateY(-1px);
+}
+
+.add-discount-btn:active {
+  transform: scale(0.99);
+}
+
+/* PASO 2 */
+
+#percentSection .field,
+#fixedSection .field,
+#variableSection .field {
+  margin-top: 2px;
+}
+
+#percentSection .percent-input,
+#fixedSection .money-input {
   margin-bottom: 8px;
+}
+
+.optional-title {
+  margin-top: 8px;
 }
 
 /* INFO */
@@ -440,6 +607,11 @@ input::placeholder {
   font-weight: 800;
   line-height: 1.08;
   letter-spacing: -0.03em;
+}
+
+.info-value-small {
+  font-size: 18px;
+  letter-spacing: -0.02em;
 }
 
 .info-caption {
@@ -571,6 +743,42 @@ input::placeholder {
   max-width: 280px;
 }
 
+.steps-panel {
+  margin-top: 12px;
+  border-top: 1px solid rgba(220, 180, 90, 0.1);
+  padding-top: 12px;
+}
+
+.steps-title {
+  margin: 0 0 7px;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.steps-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 620;
+  line-height: 1.45;
+}
+
+.steps-list li + li {
+  margin-top: 5px;
+}
+
+.steps-note {
+  margin: 8px 0 0;
+  color: var(--muted-2);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
 /* DETALLE FINO */
 
 .card:last-child {
@@ -628,5 +836,32 @@ input::placeholder {
 
   .result-help {
     font-size: 11px;
+  }
+}
+
+/* Ocultar visualmente las barras de scroll pero mantener el desplazamiento funcional */
+* {
+  -ms-overflow-style: none; /* IE y Edge antiguos */
+  scrollbar-width: none; /* Firefox */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 370px) {
+  .mode-row {
+    flex-direction: column;
+  }
+
+  .mode-btn {
+    min-height: 38px;
+  }
+
+  .money-grid {
+    flex-direction: column;
+    gap: 0;
   }
 }

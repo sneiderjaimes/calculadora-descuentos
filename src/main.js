@@ -1,4 +1,8 @@
 import "./style.css";
+import {
+  calculateHiddenRate,
+  calculateStackedDiscounts,
+} from "./calculations.js";
 
 document.querySelector("#app").innerHTML = `
   <div class="app">
@@ -6,96 +10,41 @@ document.querySelector("#app").innerHTML = `
       <header class="header">
         <div>
           <h1>Calculadora POS</h1>
-          <p>Cálculo rápido y claro</p>
         </div>
-        <button class="clear-btn" id="clearBtn">Borrar</button>
+        <button class="clear-btn" id="clearBtn">Limpiar</button>
       </header>
 
       <section class="card">
         <span class="step">Paso 1</span>
-        <h2>Precio sin descuentos</h2>
+        <h2>Precio final para el cliente</h2>
 
         <div class="money-input money-input-main">
           <span>$</span>
-          <input id="basePrice" type="tel" inputmode="numeric" placeholder="0" />
+          <input id="targetPrice" type="tel" inputmode="numeric" placeholder="0" />
         </div>
-
-        <h3 class="group-title">Descuentos que aplica</h3>
-
-        <div class="percent-row">
-          <div class="field">
-            <label class="label">POS</label>
-            <div class="percent-input">
-              <input id="posPct" type="tel" inputmode="numeric" placeholder="0" />
-              <span>%</span>
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label">Tarjeta</label>
-            <div class="percent-input">
-              <input id="cardPct" type="tel" inputmode="numeric" placeholder="0" />
-              <span>%</span>
-            </div>
-          </div>
-        </div>
-
-        <p class="warning" id="warningText"></p>
       </section>
 
       <section class="card">
         <span class="step">Paso 2</span>
-        <h2>Elige una opción</h2>
+        <h2>Descuentos que aplica el POS</h2>
 
-        <div class="mode-row">
-          <button class="mode-btn active" id="modeReal">Tengo el % real</button>
-          <button class="mode-btn" id="modeFinal">Tengo el precio final</button>
-        </div>
+        <div class="discounts-list" id="discountsList"></div>
+        <button class="add-discount-btn" id="addDiscountBtn">Agregar otro descuento</button>
 
-        <div id="realSection">
-          <div class="field">
-            <label class="label">Descuento real</label>
-            <div class="percent-input">
-              <input id="realPct" type="tel" inputmode="numeric" placeholder="0" />
-              <span>%</span>
-            </div>
-          </div>
-
-          <div class="info-plain">
-            <p class="info-label">Precio final esperado</p>
-            <p class="info-value" id="targetFinalPrice">$0</p>
-            <p class="info-caption">Calculado automáticamente</p>
-          </div>
-        </div>
-
-        <div id="finalSection" style="display: none;">
-          <div class="field">
-            <label class="label">Precio final esperado</label>
-            <div class="money-input">
-              <span>$</span>
-              <input id="finalPrice" type="tel" inputmode="numeric" placeholder="0" />
-            </div>
-          </div>
-
-          <div class="info-plain">
-            <p class="info-label">Descuento real</p>
-            <p class="info-value" id="computedRealPct">0,00%</p>
-            <p class="info-caption">Calculado automáticamente</p>
-          </div>
-        </div>
-
-        <p class="helper" id="helperText">
-          Ingresa primero el precio sin descuentos para interpretar mejor el resultado.
-        </p>
+        <p class="warning" id="warningText"></p>
       </section>
 
       <section class="card result-card">
         <span class="step">Resultado</span>
 
         <div class="result-box" id="resultBox">
-          <p class="result-kicker">PRECIO PARA EL POS</p>
+          <p class="result-kicker">PRECIO A DIGITAR</p>
           <p class="result-price" id="posPrice">$0</p>
-          <p class="result-help">Este es el precio que debes digitar en el POS</p>
+        </div>
+
+        <div class="steps-panel" id="stepsPanel" hidden>
+          <p class="steps-title">Como se calculo</p>
+          <ol class="steps-list" id="stepsList"></ol>
         </div>
       </section>
     </div>
@@ -105,27 +54,29 @@ document.querySelector("#app").innerHTML = `
 const $ = (id) => document.getElementById(id);
 
 const elements = {
-  basePrice: $("basePrice"),
-  posPct: $("posPct"),
-  cardPct: $("cardPct"),
-  realPct: $("realPct"),
-  finalPrice: $("finalPrice"),
-  targetFinalPrice: $("targetFinalPrice"),
-  computedRealPct: $("computedRealPct"),
+  targetPrice: $("targetPrice"),
+  discountsList: $("discountsList"),
+  addDiscountBtn: $("addDiscountBtn"),
   posPrice: $("posPrice"),
   resultBox: $("resultBox"),
-  helperText: $("helperText"),
   warningText: $("warningText"),
   clearBtn: $("clearBtn"),
-  modeReal: $("modeReal"),
-  modeFinal: $("modeFinal"),
-  realSection: $("realSection"),
-  finalSection: $("finalSection"),
+  stepsPanel: $("stepsPanel"),
+  stepsList: $("stepsList"),
 };
 
-let mode = "real";
+let discounts = [createDiscount()];
 let lastPosPriceText = "$0";
 let hasMounted = false;
+
+function createDiscount() {
+  return {
+    type: "percent",
+    value: 0,
+    currentPosPrice: 0,
+    observedDiscount: 0,
+  };
+}
 
 function digitsOnly(value) {
   return value.replace(/\D/g, "");
@@ -136,7 +87,7 @@ function clamp(value, min, max) {
 }
 
 function toInt(value) {
-  const clean = digitsOnly(value);
+  const clean = digitsOnly(String(value || ""));
   return clean ? parseInt(clean, 10) : 0;
 }
 
@@ -158,14 +109,18 @@ function formatMoney(value) {
   }).format(Math.round(numeric));
 }
 
+function formatMoneyDetail(value) {
+  if (!Number.isFinite(value)) return "0";
+  const hasCents = !Number.isInteger(value);
+  return new Intl.NumberFormat("es-CO", {
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 function formatPct(value) {
   if (!Number.isFinite(value)) return "0,00";
   return value.toFixed(2).replace(".", ",");
-}
-
-function roundCommercialPeso(value) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.floor(value + 0.5);
 }
 
 function setMoneyInputValue(input, digits) {
@@ -186,55 +141,257 @@ function pulseResult() {
   }, 150);
 }
 
-function updateHelperVisibility(base) {
-  if (!elements.helperText) return;
-  elements.helperText.style.display = base > 0 ? "none" : "block";
+function typeLabel(type) {
+  if (type === "fixed") return "Descuento fijo";
+  if (type === "percent") return "Descuento porcentual";
+  return "descuento variable";
 }
 
-function updateWarningText(totalDiscountPct) {
-  if (!elements.warningText) return;
+function fieldMarkup(discount, index) {
+  if (discount.type === "fixed") {
+    return `
+      <div class="field">
+        <label class="label">Monto del descuento</label>
+        <div class="money-input compact-input">
+          <span>$</span>
+          <input
+            class="discount-money-input"
+            data-index="${index}"
+            data-field="value"
+            type="tel"
+            inputmode="numeric"
+            placeholder="0"
+            value="${discount.value ? formatMoney(discount.value) : ""}"
+          />
+        </div>
+      </div>
+    `;
+  }
 
-  if (totalDiscountPct >= 100) {
-    elements.warningText.textContent =
-      "La suma de descuentos llegó a 100%. El precio para el POS se fijó en $0.";
+  if (discount.type === "percent") {
+    return `
+      <div class="field">
+        <label class="label">Porcentaje que descuenta</label>
+        <div class="percent-input compact-input">
+          <input
+            class="discount-percent-input"
+            data-index="${index}"
+            data-field="value"
+            type="tel"
+            inputmode="numeric"
+            placeholder="0"
+            value="${discount.value || ""}"
+          />
+          <span>%</span>
+        </div>
+      </div>
+    `;
+  }
+
+  const rateResult = calculateHiddenRate(
+    discount.currentPosPrice,
+    discount.observedDiscount,
+  );
+  const rateText = rateResult.warning ? "0,00%" : `${formatPct(rateResult.hiddenRate * 100)}%`;
+
+  return `
+    <div class="money-grid">
+      <div class="field">
+        <label class="label">Precio actual en POS</label>
+        <div class="money-input compact-input">
+          <span>$</span>
+          <input
+            class="discount-money-input"
+            data-index="${index}"
+            data-field="currentPosPrice"
+            type="tel"
+            inputmode="numeric"
+            placeholder="0"
+            value="${discount.currentPosPrice ? formatMoney(discount.currentPosPrice) : ""}"
+          />
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label">Descuento en pesos</label>
+        <div class="money-input compact-input">
+          <span>$</span>
+          <input
+            class="discount-money-input"
+            data-index="${index}"
+            data-field="observedDiscount"
+            type="tel"
+            inputmode="numeric"
+            placeholder="0"
+            value="${discount.observedDiscount ? formatMoney(discount.observedDiscount) : ""}"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="info-plain variable-rate">
+      <p class="info-label">Porcentaje calculado</p>
+      <p class="info-value info-value-small" data-rate-index="${index}">${rateText}</p>
+
+    </div>
+  `;
+}
+
+function renderDiscounts() {
+  elements.discountsList.innerHTML = discounts
+    .map((discount, index) => {
+      const isOnlyDiscount = discounts.length === 1;
+      const types = ["percent", "fromCurrent", "fixed"];
+
+      return `
+        <article class="discount-item">
+          <div class="discount-header">
+            <p class="group-title">Descuento ${index + 1}</p>
+            <button
+              class="remove-discount-btn"
+              data-index="${index}"
+              ${isOnlyDiscount ? "disabled" : ""}
+              aria-label="Eliminar descuento ${index + 1}"
+            >
+              Eliminar
+            </button>
+          </div>
+
+          <div class="mode-row type-row">
+            ${types
+              .map(
+                (type) => `
+                  <button
+                    class="mode-btn type-btn ${discount.type === type ? "active" : ""}"
+                    data-index="${index}"
+                    data-type="${type}"
+                  >
+                    ${typeLabel(type)}
+                  </button>
+                `,
+              )
+              .join("")}
+          </div>
+
+          <div class="discount-fields">
+            ${fieldMarkup(discount, index)}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  bindDiscountEvents();
+}
+
+function bindDiscountEvents() {
+  elements.discountsList.querySelectorAll(".type-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = toInt(button.dataset.index);
+      const nextType = button.dataset.type;
+
+      if (discounts[index].type === nextType) return;
+
+      discounts[index] = {
+        ...createDiscount(),
+        type: nextType,
+      };
+      renderDiscounts();
+      updateValues();
+    });
+  });
+
+  elements.discountsList.querySelectorAll(".remove-discount-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = toInt(button.dataset.index);
+      if (discounts.length <= 1) return;
+
+      discounts.splice(index, 1);
+      renderDiscounts();
+      updateValues();
+    });
+  });
+
+  elements.discountsList.querySelectorAll(".discount-money-input").forEach((input) => {
+    input.addEventListener("input", () => {
+      const index = toInt(input.dataset.index);
+      const field = input.dataset.field;
+      const raw = sanitizeMoney(input.value);
+
+      discounts[index][field] = toInt(raw);
+      setMoneyInputValue(input, raw);
+      updateRateText(index);
+      updateValues();
+    });
+  });
+
+  elements.discountsList.querySelectorAll(".discount-percent-input").forEach((input) => {
+    input.addEventListener("input", () => {
+      const index = toInt(input.dataset.index);
+      const field = input.dataset.field;
+
+      input.value = sanitizePercent(input.value);
+      discounts[index][field] = toInt(input.value);
+      updateValues();
+    });
+  });
+}
+
+function updateRateText(index) {
+  const rateElement = elements.discountsList.querySelector(`[data-rate-index="${index}"]`);
+  if (!rateElement) return;
+
+  const discount = discounts[index];
+  const result = calculateHiddenRate(discount.currentPosPrice, discount.observedDiscount);
+  rateElement.textContent = result.warning ? "0,00%" : `${formatPct(result.hiddenRate * 100)}%`;
+}
+
+function renderSteps(steps) {
+  if (!steps.length) {
+    elements.stepsPanel.hidden = true;
+    elements.stepsList.innerHTML = "";
     return;
   }
 
-  elements.warningText.textContent = "";
+  elements.stepsPanel.hidden = false;
+  elements.stepsList.innerHTML = steps
+    .map((step) => {
+      if (step.type === "fixed") {
+        return `
+          <li>
+            Descuento ${step.index + 1}: $${formatMoney(step.before)} + $${formatMoney(step.value)}
+            = $${formatMoney(step.after)}
+          </li>
+        `;
+      }
+
+      return `
+        <li>
+          Descuento ${step.index + 1}: $${formatMoney(step.before)} / ${formatPct(1 - step.rate)}
+          = $${formatMoneyDetail(step.after)}
+        </li>
+      `;
+    })
+    .join("");
 }
 
 function updateValues() {
-  const base = toInt(elements.basePrice.dataset.raw || "");
-  const pos = toInt(elements.posPct.value);
-  const card = toInt(elements.cardPct.value);
-  const totalDiscountPct = clamp(pos + card, 0, 100);
+  const target = toInt(elements.targetPrice.dataset.raw || "");
+  const result = calculateStackedDiscounts(target, discounts);
+  const posPriceText = `$${formatMoney(result.posPrice)}`;
 
-  const realPct = clamp(toInt(elements.realPct.value), 0, 100);
-  const manualFinal = toInt(elements.finalPrice.dataset.raw || "");
-
-  const targetFinalPrice =
-    mode === "real"
-      ? Math.max(0, roundCommercialPeso(base * (1 - realPct / 100)))
-      : Math.max(0, manualFinal);
-
-  const computedRealPctFromFinal =
-    base > 0 ? clamp((1 - targetFinalPrice / base) * 100, 0, 100) : 0;
-
-  const denominator = 1 - totalDiscountPct / 100;
-
-  const posPrice =
-    denominator <= 0
-      ? 0
-      : Math.max(0, roundCommercialPeso(targetFinalPrice / denominator));
-
-  const posPriceText = `$${formatMoney(posPrice)}`;
-
-  elements.targetFinalPrice.textContent = `$${formatMoney(targetFinalPrice)}`;
-  elements.computedRealPct.textContent = `${formatPct(computedRealPctFromFinal)}%`;
   elements.posPrice.textContent = posPriceText;
+  elements.warningText.textContent = target > 0 ? result.warning : "";
 
-  updateWarningText(totalDiscountPct);
-  updateHelperVisibility(base);
+  if (target <= 0) {
+    renderSteps([]);
+  } else if (result.warning) {
+    renderSteps([]);
+  } else if (result.activeCount === 0) {
+    renderSteps([]);
+  } else {
+    renderSteps(result.steps);
+  }
 
   if (hasMounted && posPriceText !== lastPosPriceText) {
     pulseResult();
@@ -244,7 +401,7 @@ function updateValues() {
   hasMounted = true;
 }
 
-function setupMoneyInput(input) {
+function setupTargetInput(input) {
   input.dataset.raw = "";
 
   input.addEventListener("input", () => {
@@ -260,61 +417,42 @@ function setupMoneyInput(input) {
       try {
         input.setSelectionRange(length, length);
       } catch {
-        // algunos navegadores móviles pueden no permitirlo siempre
+        // Algunos navegadores moviles pueden no permitirlo siempre.
       }
     });
   });
 }
 
-function setupPercentInput(input) {
-  input.addEventListener("input", () => {
-    input.value = sanitizePercent(input.value);
-    updateValues();
-  });
-}
-
-function setMode(nextMode) {
-  mode = nextMode;
-
-  const realActive = mode === "real";
-
-  elements.modeReal.classList.toggle("active", realActive);
-  elements.modeFinal.classList.toggle("active", !realActive);
-
-  elements.realSection.style.display = realActive ? "block" : "none";
-  elements.finalSection.style.display = realActive ? "none" : "block";
-
-  updateValues();
-}
-
 function clearAll() {
-  elements.basePrice.value = "";
-  elements.basePrice.dataset.raw = "";
-
-  elements.posPct.value = "";
-  elements.cardPct.value = "";
-  elements.realPct.value = "";
-
-  elements.finalPrice.value = "";
-  elements.finalPrice.dataset.raw = "";
-
+  elements.targetPrice.value = "";
+  elements.targetPrice.dataset.raw = "";
   elements.warningText.textContent = "";
-  setMode("real");
+  discounts = [createDiscount()];
+  renderDiscounts();
   updateValues();
 
   requestAnimationFrame(() => {
-    elements.basePrice.focus();
+    elements.targetPrice.focus();
   });
 }
 
-setupMoneyInput(elements.basePrice);
-setupMoneyInput(elements.finalPrice);
-setupPercentInput(elements.posPct);
-setupPercentInput(elements.cardPct);
-setupPercentInput(elements.realPct);
+elements.addDiscountBtn.addEventListener("click", () => {
+  discounts.push(createDiscount());
+  renderDiscounts();
+  updateValues();
 
-elements.modeReal.addEventListener("click", () => setMode("real"));
-elements.modeFinal.addEventListener("click", () => setMode("final"));
+  requestAnimationFrame(() => {
+    const lastItem = elements.discountsList.querySelector(
+      ".discount-item:last-child",
+    );
+    lastItem?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const input = lastItem?.querySelector("input");
+    input?.focus();
+  });
+});
+
 elements.clearBtn.addEventListener("click", clearAll);
 
+setupTargetInput(elements.targetPrice);
+renderDiscounts();
 updateValues();
